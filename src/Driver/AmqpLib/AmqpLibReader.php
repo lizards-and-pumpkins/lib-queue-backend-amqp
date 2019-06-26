@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types = 1);
+declare(strict_types=1);
 
 namespace LizardsAndPumpkins\Messaging\Queue\Amqp\Driver\AmqpLib;
 
@@ -40,7 +40,7 @@ class AmqpLibReader implements AmqpReader
         $this->amqpLibQueueDeclaration = $amqpLibQueueDeclaration;
     }
 
-    public function countMessages() : int
+    public function countMessages(): int
     {
         return $this->amqpLibQueueDeclaration->declareQueue($this->queueName);
     }
@@ -55,12 +55,19 @@ class AmqpLibReader implements AmqpReader
             $exclusive = false,
             $noWait = false,
             function (AMQPMessage $message) use ($noAck, $callback) {
-                $result = $callback($message->body);
-                if ($result === AmqpReader::CONSUMER_CANCEL) {
-                    $this->cancel();
-                }
-                if ($noAck === false) {
-                    $message->delivery_info['channel']->basic_ack($message->delivery_info['delivery_tag']);
+                try {
+                    $result = $callback($message->body);
+                    if ($result === AmqpReader::CONSUMER_CANCEL) {
+                        $this->cancel();
+                    }
+                } catch (\Exception $e) {
+                    throw $e;
+                } finally {
+                    if ($noAck === false) {
+                        /** @var AMQPChannel $channel */
+                        $channel = $message->delivery_info['channel'];
+                        $channel->basic_ack($message->delivery_info['delivery_tag']);
+                    }
                 }
             }
         );
