@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types = 1);
+declare(strict_types=1);
 
 namespace LizardsAndPumpkins\Messaging\Queue\Amqp\Driver;
 
@@ -29,7 +29,7 @@ abstract class AmqpDriverTestIntegration extends TestCase
 
     abstract protected static function createMasterFactoryWithAmqpDriver();
 
-    abstract protected static function getQueueName() : string;
+    abstract protected static function getQueueName(): string;
 
     /**
      * @param AmqpDriverFactory $driverFactory
@@ -40,6 +40,7 @@ abstract class AmqpDriverTestIntegration extends TestCase
         $masterFactory = new IntegrationTestMasterFactory();
         $masterFactory->register($driverFactory);
         $masterFactory->register(new IntegrationTestFactory());
+
         return $masterFactory;
     }
 
@@ -47,6 +48,7 @@ abstract class AmqpDriverTestIntegration extends TestCase
     {
         $reader->consume(function ($messageBody) use ($expected) {
             $this->assertSame($expected, $messageBody);
+
             return AmqpReader::CONSUMER_CANCEL;
         });
     }
@@ -123,6 +125,7 @@ abstract class AmqpDriverTestIntegration extends TestCase
         $transport = null;
         $reader->consume(function ($messageBody) use (&$transport) {
             $transport = $messageBody;
+
             return AmqpReader::CONSUMER_CANCEL;
         });
         $this->assertSame('foo bar buz', $transport);
@@ -141,6 +144,7 @@ abstract class AmqpDriverTestIntegration extends TestCase
         for ($i = 0; $i < 3; $i++) {
             $reader->consume(function ($messageBody) use (&$receivedMessages) {
                 $receivedMessages[] = $messageBody;
+
                 return AmqpReader::CONSUMER_CANCEL;
             });
         }
@@ -159,6 +163,7 @@ abstract class AmqpDriverTestIntegration extends TestCase
         $receivedMessages = [];
         $reader->consume(function ($messageBody) use (&$receivedMessages) {
             $receivedMessages[] = $messageBody;
+
             return count($receivedMessages) === 3 ?
                 AmqpReader::CONSUMER_CANCEL :
                 AmqpReader::CONSUMER_CONTINUE;
@@ -195,5 +200,37 @@ abstract class AmqpDriverTestIntegration extends TestCase
         $masterFactoryReadConnection = static::createMasterFactoryWithAmqpDriver();
         $reader = $masterFactoryReadConnection->createAmqpReader(static::getQueueName());
         $this->assertNextConsumedMessageSame('foo', $reader);
+    }
+
+    public function provideDifferentThrowable(): array
+    {
+        return [[\Exception::class], [\TypeError::class], [\Error::class], [\RuntimeException::class]];
+    }
+
+    /**
+     * @dataProvider provideDifferentThrowable
+     */
+    public function testMessageIsAckedEvenIfExceptionisThrown(string $throwableType)
+    {
+        $reader = $this->masterFactory->createAmqpReader(static::getQueueName());
+        $writer = $this->masterFactory->createAmqpWriter(static::getQueueName());
+
+        $message = 'This exception needs to be catched, message canceled and thrown again.';
+
+        $writer->addMessage($message);
+        try {
+            $reader->consume(static function () use ($message, $throwableType) {
+                throw new $throwableType($message);
+            });
+        } catch (\Throwable $e) {
+            $this->assertSame($message, $e->getMessage());
+        }
+
+        $this->closeConnection($this->masterFactory);
+
+        $reader = $this->masterFactory->createAmqpReader(static::getQueueName());
+        $test = $this;
+        sleep(1);
+        $this->assertSame(0, $reader->countMessages());
     }
 }

@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types = 1);
+declare(strict_types=1);
 
 namespace LizardsAndPumpkins\Messaging\Queue\Amqp\Driver;
 
@@ -18,7 +18,7 @@ class AmqpLibTest extends AmqpDriverTestIntegration
         return self::createTestMasterFactory(new AmqpLibFactory());
     }
 
-    final protected static function getQueueName() : string
+    final protected static function getQueueName(): string
     {
         return 'test-amqp-lib';
     }
@@ -27,5 +27,20 @@ class AmqpLibTest extends AmqpDriverTestIntegration
     {
         /** @var AmqpLibFactory $factory */
         $factory->getAMQPConnection()->close();
+
+        $this->removeClosedConnectionFromProperty($factory);
+    }
+
+    private function removeClosedConnectionFromProperty(MasterFactory $factory): void
+    {
+        $reflectionFactory = new \ReflectionClass($factory);
+        $methodsReflection = $reflectionFactory->getProperty('methods');
+        $methodsReflection->setAccessible(true);
+        /** @var AmqpLibFactory $amqpFactory */
+        $amqpFactory = $methodsReflection->getValue($factory)['getAMQPConnection'];
+        $amqpFactoryReflection = new \ReflectionClass($amqpFactory);
+        $connection = $amqpFactoryReflection->getProperty('connection');
+        $connection->setAccessible(true);
+        $connection->setValue($amqpFactory, null);
     }
 }
